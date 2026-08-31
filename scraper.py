@@ -18,14 +18,13 @@ DRIVE_FOLDER_ID = os.environ["DRIVE_FOLDER_ID"]
   
 headers = {"AccountKey": LTA_API_KEY, "accept": "application/json"} 
 
-resp = requests.get( 
-
-    "https://datamall2.mytransport.sg/ltaodataservice/Traffic-Imagesv2", 
-
-    headers=headers 
-
-).json() 
-
+resp_raw = requests.get(
+    "https://datamall2.mytransport.sg/ltaodataservice/Traffic-Imagesv2",
+    headers=headers
+)
+print("Status code:", resp_raw.status_code)
+print("Response text:", resp_raw.text[:300])
+resp = resp_raw.json()
   
 
 all_cameras = {c["CameraID"]: c for c in resp["value"]} 
