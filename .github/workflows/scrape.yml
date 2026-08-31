@@ -25,4 +25,4 @@ jobs:
         env:
           LTA_API_KEY: ${{ secrets.LTA_API_KEY }}
           DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
-        run: python scrape.py
+        run: python scraper.py
