@@ -2,7 +2,7 @@ import requests, io, os
 
 from datetime import datetime, timezone, timedelta 
 
-from google.oauth2 import service_account 
+from google.oauth2.credentials import Credentials
 
 from googleapiclient.discovery import build 
 
@@ -31,15 +31,15 @@ all_cameras = {c["CameraID"]: c for c in resp["value"]}
 
   
 
-SCOPES = ["https://www.googleapis.com/auth/drive.file"] 
+from google.oauth2.credentials import Credentials
 
-creds = service_account.Credentials.from_service_account_file( 
-
-    "service-account-key.json",  # this file is auto-created by the workflow — leave as is 
-
-    scopes=SCOPES 
-
-) 
+creds = Credentials(
+    None,
+    refresh_token=os.environ["GDRIVE_REFRESH_TOKEN"],
+    client_id=os.environ["GDRIVE_CLIENT_ID"],
+    client_secret=os.environ["GDRIVE_CLIENT_SECRET"],
+    token_uri="https://oauth2.googleapis.com/token",
+)
 
 drive_service = build("drive", "v3", credentials=creds) 
 
