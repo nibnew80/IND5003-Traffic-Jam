@@ -1,0 +1,28 @@
+name: Scrape Photo to Drive
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: pip install requests google-api-python-client google-auth
+
+      - name: Write Google credentials
+        run: echo '${{ secrets.GDRIVE_CREDENTIALS }}' > service-account-key.json
+
+      - name: Run scraper
+        env:
+          LTA_API_KEY: ${{ secrets.LTA_API_KEY }}
+          DRIVE_FOLDER_ID: ${{ secrets.DRIVE_FOLDER_ID }}
+        run: python scrape.py
