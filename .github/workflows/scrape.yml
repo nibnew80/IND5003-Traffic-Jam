@@ -7,6 +7,9 @@ jobs:
   scrape:
     runs-on: ubuntu-latest
     timeout-minutes: 65
+    permissions:
+      actions: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -25,3 +28,8 @@ jobs:
           LOOP_COUNT: '11'
           LOOP_INTERVAL: '300'
         run: python scraper.py
+      - name: Trigger next run
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run scrape.yml --ref main
