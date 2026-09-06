@@ -1,5 +1,4 @@
-requests
+-r requirements-scraper.txt
 Pillow
 ultralytics
-google-auth
-google-api-python-client
+pandas
