@@ -5,6 +5,9 @@ jobs:
   scrape:
     runs-on: ubuntu-latest
     timeout-minutes: 365
+    concurrency:
+      group: scrape-singleton
+      cancel-in-progress: false
     permissions:
       actions: write
       contents: read
