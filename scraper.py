@@ -28,6 +28,32 @@ creds = Credentials(
 drive = build("drive", "v3", credentials=creds, cache_discovery=False)
 
 last_link = {}  # cam_id -> ImageLink of the last frame we uploaded
+cam_folders = {}  # cam_id -> Drive folder ID
+
+
+def setup_camera_folders():
+    """Find the pre-created subfolder for each camera. Fails immediately if any are missing."""
+    missing = []
+    for cam_id in CAMERA_IDS:
+        folder_name = f"cam{cam_id}"
+        query = (
+            f"name='{folder_name}' and '{DRIVE_FOLDER_ID}' in parents "
+            f"and mimeType='application/vnd.google-apps.folder' and trashed=false"
+        )
+        results = drive.files().list(q=query, fields="files(id, name)").execute()
+        files = results.get("files", [])
+        if not files:
+            missing.append(folder_name)
+        else:
+            cam_folders[cam_id] = files[0]["id"]
+            print(f"Found folder: {folder_name} (ID: {files[0]['id']})")
+
+    if missing:
+        raise RuntimeError(
+            f"Missing Drive folders: {missing}. "
+            f"Please create them manually inside the root folder and restart."
+        )
+    print(f"All camera folders ready: {cam_folders}")
 
 
 def scrape_once():
@@ -58,7 +84,7 @@ def scrape_once():
             filename = f"cam{cam_id}_{timestamp}.jpg"
             media = MediaIoBaseUpload(io.BytesIO(img.content), mimetype="image/jpeg")
             created = drive.files().create(
-                body={"name": filename, "parents": [DRIVE_FOLDER_ID]},
+                body={"name": filename, "parents": [cam_folders[cam_id]]},
                 media_body=media,
                 fields="id",
             ).execute()
@@ -69,6 +95,7 @@ def scrape_once():
 
 
 if __name__ == "__main__":
+    setup_camera_folders()
     for i in range(LOOP_COUNT):
         scrape_once()
         if i < LOOP_COUNT - 1:
