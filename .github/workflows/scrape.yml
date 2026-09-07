@@ -4,7 +4,7 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 65
+    timeout-minutes: 365
     permissions:
       actions: write
       contents: read
@@ -23,7 +23,11 @@ jobs:
           GDRIVE_REFRESH_TOKEN: ${{ secrets.GDRIVE_REFRESH_TOKEN }}
           GDRIVE_CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
           GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
-          LOOP_COUNT: '11'
+          LOOP_COUNT: '71'
           LOOP_INTERVAL: '300'
         run: python scraper.py
-   
+      - name: Trigger next run
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run scrape.yml --ref main
