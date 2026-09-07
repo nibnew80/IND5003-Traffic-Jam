@@ -26,8 +26,4 @@ jobs:
           LOOP_COUNT: '11'
           LOOP_INTERVAL: '300'
         run: python scraper.py
-      - name: Trigger next run
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run scrape.yml --ref main
+   
