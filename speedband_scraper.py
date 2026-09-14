@@ -9,21 +9,40 @@ import requests
 
 LTA_API_KEY = os.environ["LTA_API_KEY"]
 
-# LTA DataMall endpoints. LTA has used both a `TrafficSpeedBandsv2` path and a
-# newer `v3/TrafficSpeedBands` path for the speed bands dataset over time —
-# if either URL below 404s, check the current DataMall API docs and swap the
-# path here.
-SPEED_BANDS_URL = "https://datamall2.mytransport.sg/ltaodataservice/v4/TrafficSpeedBands"
+# LTA DataMall endpoints. Confirmed working against a live key on 2026-09-14 —
+# `v3/TrafficSpeedBands` 404s, `TrafficSpeedBandsv2` is the correct path.
+SPEED_BANDS_URL = "https://datamall2.mytransport.sg/ltaodataservice/TrafficSpeedBandsv2"
 EST_TRAVEL_TIMES_URL = "https://datamall2.mytransport.sg/ltaodataservice/EstTravelTimes"
 
-# Case-insensitive substrings matched against each record's text fields, to
-# keep only rows relevant to our two crossings (Woodlands Causeway, Tuas
-# Second Link). Check the "No rows matched" / matched-count log lines on the
-# first real run — Estimated Travel Times in particular only covers named
-# expressways, so it may or may not carry rows for the checkpoint approach
-# roads at all; if it logs zero matches every run, that confirms it doesn't
-# and the speed bands file is the one to rely on.
-ROAD_KEYWORDS = ["woodlands causeway", "woodlands crossing", "tuas checkpoint viaduct"]
+# Maps a case-insensitive substring (matched against each record's text
+# fields) to the camera it's ground truth for. This both filters (only rows
+# matching some key are kept) and tags each row with which camera's vehicle
+# counts it should be compared against later.
+#
+# Confirmed against live data on 2026-09-14:
+#   - Speed bands' RoadName for the Tuas crossing is "TUAS SECOND CROSSING"
+#     ("tuas" alone is far too broad — Tuas is a whole industrial district
+#     with ~90 named roads, e.g. Tuas Avenue 1-20, Tuas South Street 1-15).
+#     Woodlands is "WOODLANDS CAUSEWAY" (2701) plus a separately-listed
+#     "CAUSEWAY" entry (different LinkID/road_category) tentatively mapped to
+#     2702 (checkpoint) — NOT independently confirmed yet, since we haven't
+#     been able to search Speed Bands for an explicit "checkpoint" name.
+#     Once a run has collected some rows, check the start_lat/start_lon/
+#     end_lat/end_lon columns against each camera's known location to verify
+#     or correct this mapping.
+#   - Estimated Travel Times has no Woodlands/Causeway coverage at all in
+#     this data — it only carries "AYE" segments with "TUAS CHECKPOINT" as a
+#     waypoint, which is the approach road 4712 (AYE/Tuas Ave 8) watches, so
+#     this file will only ever populate for that camera.
+#   - "TUAS AVENUE 8" (4712's approach, in Speed Bands) is confirmed real —
+#     it showed up in the earlier broad "tuas" test pull.
+ROAD_CAMERA_MAP = {
+    "woodlands causeway": "2701",
+    "causeway": "2702",  # tentative — verify via lat/lon once collected
+    "tuas second crossing": "4703",
+    "tuas avenue 8": "4712",
+    "tuas checkpoint": "4712",
+}
 
 HEADERS = {"AccountKey": LTA_API_KEY, "accept": "application/json"}
 TIMEOUT = 30
@@ -39,18 +58,24 @@ SPEED_BANDS_CSV = Path("data/speed_bands.csv")
 SPEED_BANDS_FIELDS = [
     "timestamp",
     "time_bucket_5min",
+    "camera_ref",
     "link_id",
     "road_name",
     "road_category",
     "speed_band",
     "min_speed",
     "max_speed",
+    "start_lat",
+    "start_lon",
+    "end_lat",
+    "end_lon",
 ]
 
 TRAVEL_TIMES_CSV = Path("data/estimated_travel_times.csv")
 TRAVEL_TIMES_FIELDS = [
     "timestamp",
     "time_bucket_5min",
+    "camera_ref",
     "name",
     "direction",
     "far_end_point",
@@ -97,9 +122,13 @@ def fetch_all(url):
     return records
 
 
-def matches_keywords(record, *fields):
+def camera_ref_for(record, *fields):
+    """Return the camera_id this record is ground truth for, or None."""
     text = " ".join(str(record.get(f) or "") for f in fields).lower()
-    return any(kw in text for kw in ROAD_KEYWORDS)
+    for keyword, camera_id in ROAD_CAMERA_MAP.items():
+        if keyword in text:
+            return camera_id
+    return None
 
 
 def ensure_csv(path, fields):
@@ -116,25 +145,31 @@ def collect_speed_bands(timestamp, time_bucket):
         print(f"[{timestamp}] Speed bands request failed: {e}")
         return 0
 
-    matched = [r for r in records if matches_keywords(r, "RoadName")]
+    matched = [(r, camera_ref_for(r, "RoadName")) for r in records]
+    matched = [(r, cam) for r, cam in matched if cam is not None]
     if not matched:
-        print(f"[{timestamp}] Speed bands: no rows matched {ROAD_KEYWORDS} out of {len(records)} fetched.")
+        print(f"[{timestamp}] Speed bands: no rows matched {list(ROAD_CAMERA_MAP)} out of {len(records)} fetched.")
         return 0
 
     ensure_csv(SPEED_BANDS_CSV, SPEED_BANDS_FIELDS)
     with open(SPEED_BANDS_CSV, "a", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=SPEED_BANDS_FIELDS)
-        for r in matched:
+        for r, cam in matched:
             writer.writerow(
                 {
                     "timestamp": timestamp,
                     "time_bucket_5min": time_bucket,
+                    "camera_ref": cam,
                     "link_id": r.get("LinkID"),
                     "road_name": r.get("RoadName"),
                     "road_category": r.get("RoadCategory"),
                     "speed_band": r.get("SpeedBand"),
                     "min_speed": r.get("MinimumSpeed"),
                     "max_speed": r.get("MaximumSpeed"),
+                    "start_lat": r.get("StartLat"),
+                    "start_lon": r.get("StartLon"),
+                    "end_lat": r.get("EndLat"),
+                    "end_lon": r.get("EndLon"),
                 }
             )
     print(f"[{timestamp}] Speed bands: logged {len(matched)} matched rows.")
@@ -148,19 +183,21 @@ def collect_travel_times(timestamp, time_bucket):
         print(f"[{timestamp}] Estimated travel times request failed: {e}")
         return 0
 
-    matched = [r for r in records if matches_keywords(r, "Name", "FarEndPoint", "StartPoint", "EndPoint")]
+    matched = [(r, camera_ref_for(r, "Name", "FarEndPoint", "StartPoint", "EndPoint")) for r in records]
+    matched = [(r, cam) for r, cam in matched if cam is not None]
     if not matched:
-        print(f"[{timestamp}] Travel times: no rows matched {ROAD_KEYWORDS} out of {len(records)} fetched.")
+        print(f"[{timestamp}] Travel times: no rows matched {list(ROAD_CAMERA_MAP)} out of {len(records)} fetched.")
         return 0
 
     ensure_csv(TRAVEL_TIMES_CSV, TRAVEL_TIMES_FIELDS)
     with open(TRAVEL_TIMES_CSV, "a", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=TRAVEL_TIMES_FIELDS)
-        for r in matched:
+        for r, cam in matched:
             writer.writerow(
                 {
                     "timestamp": timestamp,
                     "time_bucket_5min": time_bucket,
+                    "camera_ref": cam,
                     "name": r.get("Name"),
                     "direction": r.get("Direction"),
                     "far_end_point": r.get("FarEndPoint"),
