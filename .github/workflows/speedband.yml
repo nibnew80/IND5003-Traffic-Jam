@@ -1,0 +1,36 @@
+name: Scrape Speed Bands
+on:
+  workflow_dispatch:
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 365
+    concurrency:
+      group: speedband-singleton
+      cancel-in-progress: false
+    permissions:
+      actions: write
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements-scraper.txt
+      - name: Configure git identity
+        run: |
+          git config user.name "speedband-bot"
+          git config user.email "actions@users.noreply.github.com"
+      - name: Run speed band scraper
+        env:
+          LTA_API_KEY: ${{ secrets.LTA_API_KEY }}
+          LOOP_COUNT: '71'
+          LOOP_INTERVAL: '300'
+        run: python speedband_scraper.py
+      - name: Trigger next run
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run speedband.yml --ref main
