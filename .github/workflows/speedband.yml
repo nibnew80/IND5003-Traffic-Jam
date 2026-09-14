@@ -1,6 +1,15 @@
 name: Scrape Speed Bands
 on:
   workflow_dispatch:
+    inputs:
+      loop_count:
+        description: 'Number of 5-minute cycles to run (71 ~= 6 hours). Use a small number like 3 for a quick test.'
+        required: false
+        default: '71'
+      loop_interval:
+        description: 'Seconds between cycles (300 = 5 minutes). Use a small number like 20 for a quick test.'
+        required: false
+        default: '300'
 jobs:
   scrape:
     runs-on: ubuntu-latest
@@ -26,8 +35,8 @@ jobs:
       - name: Run speed band scraper
         env:
           LTA_API_KEY: ${{ secrets.LTA_API_KEY }}
-          LOOP_COUNT: '71'
-          LOOP_INTERVAL: '300'
+          LOOP_COUNT: ${{ inputs.loop_count }}
+          LOOP_INTERVAL: ${{ inputs.loop_interval }}
         run: python speedband_scraper.py
       - name: Trigger next run
         if: always()
