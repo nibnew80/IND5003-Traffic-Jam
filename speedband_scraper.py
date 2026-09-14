@@ -13,7 +13,7 @@ LTA_API_KEY = os.environ["LTA_API_KEY"]
 # newer `v3/TrafficSpeedBands` path for the speed bands dataset over time —
 # if either URL below 404s, check the current DataMall API docs and swap the
 # path here.
-SPEED_BANDS_URL = "https://datamall2.mytransport.sg/ltaodataservice/v3/TrafficSpeedBands"
+SPEED_BANDS_URL = "https://datamall2.mytransport.sg/ltaodataservice/v4/TrafficSpeedBands"
 EST_TRAVEL_TIMES_URL = "https://datamall2.mytransport.sg/ltaodataservice/EstTravelTimes"
 
 # Case-insensitive substrings matched against each record's text fields, to
