@@ -23,7 +23,7 @@ EST_TRAVEL_TIMES_URL = "https://datamall2.mytransport.sg/ltaodataservice/EstTrav
 # expressways, so it may or may not carry rows for the checkpoint approach
 # roads at all; if it logs zero matches every run, that confirms it doesn't
 # and the speed bands file is the one to rely on.
-ROAD_KEYWORDS = ["causeway", "tuas"]
+ROAD_KEYWORDS = ["woodlands causeway", "woodlands crossing", "tuas checkpoint viaduct"]
 
 HEADERS = {"AccountKey": LTA_API_KEY, "accept": "application/json"}
 TIMEOUT = 30
