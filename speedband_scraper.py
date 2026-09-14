@@ -11,7 +11,7 @@ LTA_API_KEY = os.environ["LTA_API_KEY"]
 
 # LTA DataMall endpoints. Confirmed working against a live key on 2026-09-14 —
 # `v3/TrafficSpeedBands` 404s, `TrafficSpeedBandsv2` is the correct path.
-SPEED_BANDS_URL = "https://datamall2.mytransport.sg/ltaodataservice/TrafficSpeedBandsv2"
+SPEED_BANDS_URL = "https://datamall2.mytransport.sg/ltaodataservice/v4/TrafficSpeedBands"
 EST_TRAVEL_TIMES_URL = "https://datamall2.mytransport.sg/ltaodataservice/EstTravelTimes"
 
 # Maps a case-insensitive substring (matched against each record's text
