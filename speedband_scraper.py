@@ -40,7 +40,7 @@ ROAD_CAMERA_MAP = {
     "woodlands causeway": "2701",
     "causeway": "2702",  # tentative — verify via lat/lon once collected
     "tuas second crossing": "4703",
-    "tuas avenue 8": "4712",
+    "aye": "4712",
     "tuas checkpoint": "4712",
 }
 
