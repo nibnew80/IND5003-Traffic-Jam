@@ -21,43 +21,15 @@ CAMERA_COORDS = {
     "4703": (1.350168, 103.634076),
     "4712": (1.341244, 103.643913),
 }
-
 # Only keep a Speed Bands row if it's within this distance of its camera.
 # Validated on 2026-10-01: every point in the three trusted clusters above
 # is within 400m of its centroid, so 500m has margin without being so wide
 # it lets in another road's segments.
 MAX_DISTANCE_KM = 0.5
 
-# Speed Bands is filtered purely by distance now (see camera_ref_by_distance
-# below) — no road-name keyword involved. We tried keyword matching three
-# times ("tuas", then "tuas avenue 8", then "ayer rajah expressway") and each
-# one turned out to be shared by unrelated roads somewhere else on the
-# island (Tuas is an entire industrial district; "aye"/"ayer" is also a
-# common Malay word in street names, e.g. Kreta Ayer in Chinatown, ~15km
-# away). Since Speed Bands rows carry real coordinates, distance from the
-# camera is a more direct and reliable filter than guessing road names.
-
-# Text filter for Estimated Travel Times. This dataset has no lat/lon, so
-# MAX_DISTANCE_KM can't apply here — keep this list precise instead. "aye"
-# was tried and removed on 2026-10-01: it matched other expressways' segments
-# merely because their FarEndPoint/StartPoint/EndPoint text mentioned an AYE
-# interchange (e.g. a PIE segment near Changi, ~40km from Tuas, whose
-# far_end_point just says "PIE/AYE INTERCHANGE"). "tuas checkpoint" alone
-# already captures the real AYE-approaching-Tuas segments cleanly (confirmed
-# clean in the original test before "aye" was added) and nothing else has
-# ever matched here for Woodlands in any test so far.
 TRAVEL_ROAD_CAMERA_MAP = {
     "tuas checkpoint": "4712",
 }
-
-
-#ROAD_CAMERA_MAP = {
- #   "woodlands causeway": "2701",
-  #  "causeway": "2702",  # tentative — verify via lat/lon once collected
-   # "tuas second crossing": "4703",
-    #"aye": "4712",
-    #"tuas checkpoint": "4712",
-#}
 
 HEADERS = {"AccountKey": LTA_API_KEY, "accept": "application/json"}
 TIMEOUT = 30
@@ -192,7 +164,7 @@ def collect_speed_bands(timestamp, time_bucket):
         if cam is not None:
             matched.append((r, cam))
 
-if not matched:
+    if not matched:
         print(f"[{timestamp}] Speed bands: no rows within {MAX_DISTANCE_KM}km of any camera, out of {len(records)} fetched.")
         return 0
 
