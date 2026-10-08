@@ -19,6 +19,7 @@ CAMERA_COORDS = {
     "2702": (1.444504, 103.767372),
     "4703": (1.350168, 103.634076),
     "4712": (1.341244, 103.643913),
+    "4713": (1.347645829, 103.6366955),
 }
 # Only keep a Speed Bands row if it's within this distance of its camera.
 # Validated on 2026-10-01: every point in the three trusted clusters above
@@ -26,6 +27,46 @@ CAMERA_COORDS = {
 # it lets in another road's segments.
 MAX_DISTANCE_KM = 0.5
 
+# --- Direction -------------------------------------------------------------
+# Some cameras (e.g. 2702, a wide checkpoint shot) show both directions of
+# traffic in one frame, so a single blended ground-truth number per camera
+# would wash out a jam happening on only one side. Each Speed Bands LinkID
+# is itself already one direction only (LTA splits each carriageway into its
+# own LinkID) — we just weren't labeling which. To label it without assuming
+# a fixed compass axis (checked on 2026-10-08: Woodlands' two cameras differ
+# mainly in latitude, Tuas' differ in both lat AND lon — the corridors aren't
+# oriented the same way, so "latitude increasing = towards Malaysia" would
+# only work for one of the two crossings), each crossing gets a border-side
+# anchor point: whichever of its own cameras sits literally on/at the border
+# crossing. A segment's direction is then whichever of its start/end point is
+# closer to that anchor — closer at the end = heading toward Malaysia,
+# closer at the start = heading into Singapore.
+BORDER_ANCHOR = {
+    "2701": CAMERA_COORDS["2701"],  # Woodlands Causeway bridge itself
+    "2702": CAMERA_COORDS["2701"],
+    "4703": CAMERA_COORDS["4703"],  # Tuas Second Crossing bridge itself
+    "4712": CAMERA_COORDS["4703"],
+    "4713": CAMERA_COORDS["4703"],
+}
+
+# Speed Bands is filtered purely by distance now (see camera_ref_by_distance
+# below) — no road-name keyword involved. We tried keyword matching three
+# times ("tuas", then "tuas avenue 8", then "ayer rajah expressway") and each
+# one turned out to be shared by unrelated roads somewhere else on the
+# island (Tuas is an entire industrial district; "aye"/"ayer" is also a
+# common Malay word in street names, e.g. Kreta Ayer in Chinatown, ~15km
+# away). Since Speed Bands rows carry real coordinates, distance from the
+# camera is a more direct and reliable filter than guessing road names.
+
+# Text filter for Estimated Travel Times. This dataset has no lat/lon, so
+# MAX_DISTANCE_KM can't apply here — keep this list precise instead. "aye"
+# was tried and removed on 2026-10-01: it matched other expressways' segments
+# merely because their FarEndPoint/StartPoint/EndPoint text mentioned an AYE
+# interchange (e.g. a PIE segment near Changi, ~40km from Tuas, whose
+# far_end_point just says "PIE/AYE INTERCHANGE"). "tuas checkpoint" alone
+# already captures the real AYE-approaching-Tuas segments cleanly (confirmed
+# clean in the original test before "aye" was added) and nothing else has
+# ever matched here for Woodlands in any test so far.
 TRAVEL_ROAD_CAMERA_MAP = {
     "tuas checkpoint": "4712",
 }
@@ -51,6 +92,7 @@ SPEED_BANDS_FIELDS = [
     "speed_band",
     "min_speed",
     "max_speed",
+    "direction",  # "to_malaysia" or "to_singapore" — see BORDER_ANCHOR above
     "start_lat",
     "start_lon",
     "end_lat",
@@ -63,7 +105,11 @@ TRAVEL_TIMES_FIELDS = [
     "time_bucket_5min",
     "camera_ref",
     "name",
-    "direction",
+    "direction",  # LTA's raw code (1 or 2)
+    "direction_label",  # decoded from real data on 2026-10-08: direction=1
+                         # rows always have far_end_point=TUAS CHECKPOINT
+                         # (heading toward it) and direction=2 rows have
+                         # far_end_point=CITY (heading away, into Singapore)
     "far_end_point",
     "start_point",
     "end_point",
@@ -139,6 +185,12 @@ def camera_ref_by_distance(lat, lon):
             best_cam, best_dist = cam, d
     return best_cam
 
+def direction_for(cam, start, end):
+    """"to_malaysia" if this segment's end is closer to the border crossing
+    than its start, else "to_singapore". See BORDER_ANCHOR above."""
+    anchor = BORDER_ANCHOR[cam]
+    return "to_malaysia" if haversine_km(anchor, end) < haversine_km(anchor, start) else "to_singapore"
+
 
 def ensure_csv(path, fields):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -171,6 +223,9 @@ def collect_speed_bands(timestamp, time_bucket):
     with open(SPEED_BANDS_CSV, "a", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=SPEED_BANDS_FIELDS)
         for r, cam in matched:
+            start = (float(r["StartLat"]), float(r["StartLon"]))
+            end_lat, end_lon = r.get("EndLat"), r.get("EndLon")
+            direction = direction_for(cam, start, (float(end_lat), float(end_lon))) if end_lat and end_lon else ""
             writer.writerow(
                 {
                     "timestamp": timestamp,
@@ -182,6 +237,7 @@ def collect_speed_bands(timestamp, time_bucket):
                     "speed_band": r.get("SpeedBand"),
                     "min_speed": r.get("MinimumSpeed"),
                     "max_speed": r.get("MaximumSpeed"),
+                    "direction": direction,
                     "start_lat": r.get("StartLat"),
                     "start_lon": r.get("StartLon"),
                     "end_lat": r.get("EndLat"),
@@ -190,7 +246,6 @@ def collect_speed_bands(timestamp, time_bucket):
             )
     print(f"[{timestamp}] Speed bands: logged {len(matched)} matched rows.")
     return len(matched)
-
 
 def collect_travel_times(timestamp, time_bucket):
     try:
@@ -212,6 +267,13 @@ def collect_travel_times(timestamp, time_bucket):
     with open(TRAVEL_TIMES_CSV, "a", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=TRAVEL_TIMES_FIELDS)
         for r, cam in matched:
+            far_end = (r.get("FarEndPoint") or "").upper()
+            if "TUAS CHECKPOINT" in far_end:
+                direction_label = "to_malaysia"
+            elif "CITY" in far_end:
+                direction_label = "to_singapore"
+            else:
+                direction_label = ""  # unseen pattern — leave for manual review
             writer.writerow(
                 {
                     "timestamp": timestamp,
@@ -219,6 +281,7 @@ def collect_travel_times(timestamp, time_bucket):
                     "camera_ref": cam,
                     "name": r.get("Name"),
                     "direction": r.get("Direction"),
+                    "direction_label": direction_label,
                     "far_end_point": r.get("FarEndPoint"),
                     "start_point": r.get("StartPoint"),
                     "end_point": r.get("EndPoint"),
