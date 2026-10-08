@@ -4,7 +4,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
-CAMERA_IDS = ["2701", "2702", "4703", "4712"]
+CAMERA_IDS = ["2701", "2702", "4703", "4712", "4713"]
 LTA_URL = "https://datamall2.mytransport.sg/ltaodataservice/Traffic-Imagesv2"
 LTA_API_KEY = os.environ["LTA_API_KEY"]
 DRIVE_FOLDER_ID = os.environ["DRIVE_FOLDER_ID"]
