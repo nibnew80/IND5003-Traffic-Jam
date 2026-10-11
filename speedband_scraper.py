@@ -92,7 +92,22 @@ BORDER_ANCHOR = {
 # to, so it stays correct for every duplicate).
 TRAVEL_NAME_CAMERA_MAP = {
     "AYE": ["4703", "4712", "4713"],
-    "BKE": ["2701", "2702"], 
+    "BKE": ["2701", "2702"],  # confirmed real on 2026-10-10 — 13 unique
+    # segments matched, split evenly across both cameras.
+}
+
+# Maps a record's exact FarEndPoint value to which direction of travel it
+# represents. Confirmed from real data: AYE's only two FarEndPoint values
+# are "TUAS CHECKPOINT" (heading to the Tuas crossing) and "CITY" (heading
+# away from it). BKE's are "WOODLANDS CENTRE" (heading to the Woodlands
+# crossing) and "PIE" (heading away, south into Singapore) — found on
+# 2026-10-10; the earlier "WOODLANDS CHECKPOINT" guess was wrong and never
+# matched anything, which is why it logged blank instead of a wrong label.
+FAR_END_DIRECTION = {
+    "TUAS CHECKPOINT": "to_malaysia",
+    "WOODLANDS CENTRE": "to_malaysia",
+    "CITY": "to_singapore",
+    "PIE": "to_singapore",
 }
 
 HEADERS = {"AccountKey": LTA_API_KEY, "accept": "application/json"}
@@ -296,13 +311,8 @@ def collect_travel_times(timestamp, time_bucket):
     with open(TRAVEL_TIMES_CSV, "a", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=TRAVEL_TIMES_FIELDS)
         for r, cams in matched:
-            far_end = (r.get("FarEndPoint") or "").upper()
-            if "TUAS CHECKPOINT" in far_end or "WOODLANDS CHECKPOINT" in far_end:
-                direction_label = "to_malaysia"
-            elif "CITY" in far_end:
-                direction_label = "to_singapore"
-            else:
-                direction_label = ""  # unseen pattern — leave for manual review
+            far_end = (r.get("FarEndPoint") or "").strip().upper()
+            direction_label = FAR_END_DIRECTION.get(far_end, "")  # "" = unseen pattern, leave for manual review
             for cam in cams:
                 writer.writerow(
                     {
