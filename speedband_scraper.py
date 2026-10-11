@@ -90,16 +90,9 @@ BORDER_ANCHOR = {
 # camera in the list below (same data, same direction_label — that's
 # computed from the record's own text, not from which camera it's attributed
 # to, so it stays correct for every duplicate).
-TRAVEL_ROAD_CAMERA_MAP = {
-    "tuas checkpoint": ["4703", "4712", "4713"],
-    # Untested as of 2026-10-08 — added to check whether Travel Times covers
-    # BKE/Woodlands the same way it covers AYE/Tuas. If the next run logs 0
-    # matches for this, that's a real "no coverage" confirmation (unlike our
-    # earlier assumption, which was never actually tested against this exact
-    # phrase). If it does match, check what RoadName/Name comes back — update
-    # the direction_label logic below to match on that road's actual segment
-    # count/pattern too, the way "TUAS CHECKPOINT" is handled.
-    "woodlands checkpoint": ["2701", "2702"],
+TRAVEL_NAME_CAMERA_MAP = {
+    "AYE": ["4703", "4712", "4713"],
+    "BKE": ["2701", "2702"], 
 }
 
 HEADERS = {"AccountKey": LTA_API_KEY, "accept": "application/json"}
@@ -197,14 +190,12 @@ def fetch_all(url):
     return records
 
 
-def camera_refs_for(record, road_map, *fields):
-    """Return the list of camera_ids this record's text matched (may be
-    more than one, e.g. several cameras sharing one corridor), or []."""
-    text = " ".join(str(record.get(f) or "") for f in fields).lower()
-    for keyword, camera_ids in road_map.items():
-        if keyword in text:
-            return camera_ids
-    return []
+def camera_refs_for_name(record, name_map):
+    """Return the list of camera_ids for this record's exact Name field
+    (e.g. "AYE"), or []. Exact match, not a substring search — see
+    TRAVEL_NAME_CAMERA_MAP above for why that distinction matters."""
+    name = (record.get("Name") or "").strip().upper()
+    return name_map.get(name, [])
 
 
 def camera_ref_by_distance(lat, lon):
@@ -289,15 +280,15 @@ def collect_travel_times(timestamp, time_bucket):
         print(f"[{timestamp}] Estimated travel times request failed: {e}")
         return 0
 
-    # Each matched record maps to a *list* of cameras (see TRAVEL_ROAD_CAMERA_MAP)
+    # Each matched record maps to a *list* of cameras (see TRAVEL_NAME_CAMERA_MAP)
     # — one row gets written per camera in that list, not one row total.
     matched = [
         (r, cams)
         for r in records
-        if (cams := camera_refs_for(r, TRAVEL_ROAD_CAMERA_MAP, "Name", "FarEndPoint", "StartPoint", "EndPoint"))
+        if (cams := camera_refs_for_name(r, TRAVEL_NAME_CAMERA_MAP))
     ]
     if not matched:
-        print(f"[{timestamp}] Travel times: no rows matched {list(TRAVEL_ROAD_CAMERA_MAP)} out of {len(records)} fetched.")
+        print(f"[{timestamp}] Travel times: no rows matched Name in {list(TRAVEL_NAME_CAMERA_MAP)} out of {len(records)} fetched.")
         return 0
 
     ensure_csv(TRAVEL_TIMES_CSV, TRAVEL_TIMES_FIELDS)
